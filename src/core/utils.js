@@ -14,7 +14,7 @@ module.exports = {
     lang(filePath) {
         return fang(filePath) || {
             name: Path.parse(filePath).ext.replace('.', '').toUpperCase(),
-            mode: 'text',
+            ace_mode: 'text',
             scope: null,
             color: null,
         };
