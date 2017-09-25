@@ -176,7 +176,7 @@ describe('Entity', function () {
       expect(entity.get('foo.bar[0]')).to.equal('one');
       expect(entity.get('foo')).to.eql({bar: ['one']});
     });
-    it('create a copy of the original value', function () {
+    it('creates a copy of the original value', function () {
       const entity = makeEntity();
       const status = {
         tag: 'wip',

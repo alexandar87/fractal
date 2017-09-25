@@ -21,44 +21,23 @@ class Entity {
     _getters.set(this, []);
 
     return new Proxy(this, {
-      get(target, propKey, receiver) {
-        if (!Reflect.has(target, propKey)) {
-          return target.get(propKey);
-        }
-        const originalProp = Reflect.get(target, propKey);
-        if ((typeof originalProp === 'function') && (propKey !== 'constructor')) {
-          return originalProp.bind(target);
-        }
-        return originalProp;
-      },
-      set(target, propKey, value, receiver) {
-        if (!Reflect.has(target, propKey)) {
-          target.set(propKey, value);
-          return true;
-        }
-        return Reflect.set(target, propKey, value);
-      },
-      has(target, propKey) {
-        return (
-          Reflect.has(target, propKey) ||
-          Reflect.has(_data.get(target), propKey) ||
-          Reflect.has(_config.get(target), propKey)
-        );
-      }
+      get: this._proxyGet,
+      set: this._proxySet,
+      has: this._proxyHas
     });
   }
 
   get(path, fallback) {
     fallback = get(_config.get(this), path, fallback);
     const initial = cloneDeep(get(_data.get(this), path, fallback));
-    return computeFinal(_getters.get(this), path, initial, this);
+    return this._computeFinalGetter(path, initial);
   }
 
   set(path, value) {
     assert.string(path, `${this[Symbol.toStringTag]}.set - 'path' argument must be a string [path-invalid]`);
     // TODO: extract shared caching code with config // this.removeFromCache(path);
     const initial = cloneDeep(value);
-    const final = computeFinal(_setters.get(this), path, initial, this);
+    const final = this._computeFinalSetter(path, initial);
     set(_data.get(this), path, final);
     return final;
   }
@@ -91,7 +70,7 @@ class Entity {
   toJSON() {
     let props = this.getComputedProps();
     props = pickBy(props, (item, key) => {
-      return !key.startsWith('_');
+      return !key.startsWith('_') && typeof item !== 'function';
     });
     return mapValues(props, (item, key) => {
       if (Buffer.isBuffer(item)) {
@@ -106,10 +85,7 @@ class Entity {
 
   clone() {
     const cloned = new this.constructor(this._config);
-    for (let [key, value] of Object.entries(this._data)) {
-      cloned.set(key, value);
-    }
-    return cloned;
+    return this._addDataEntries(cloned);
   }
 
   hash() {
@@ -123,6 +99,51 @@ class Entity {
   // TODO: Improve formatting: use logging class?
   inspect(depth, opts) {
     return `${this[Symbol.toStringTag]} ${JSON.stringify(this.getComputedProps())}`;
+  }
+
+  _proxyHas(target, propKey) {
+    return (
+      Reflect.has(target, propKey) ||
+      Reflect.has(_data.get(target), propKey) ||
+      Reflect.has(_config.get(target), propKey)
+    );
+  }
+
+  _proxyGet(target, propKey, receiver) {
+    if (!Reflect.has(target, propKey)) {
+      return target.get(propKey);
+    }
+    const originalProp = Reflect.get(target, propKey);
+    if (typeof propKey !== 'string') {
+      return originalProp;
+    }
+    if ((typeof originalProp === 'function') && (propKey !== 'constructor')) {
+      return originalProp.bind(target);
+    }
+    return originalProp;
+  }
+
+  _proxySet(target, propKey, value, receiver) {
+    if (!Reflect.has(target, propKey)) {
+      target.set(propKey, value);
+      return true;
+    }
+    return Reflect.set(target, propKey, value);
+  }
+
+  _addDataEntries(object) {
+    for (let [key, value] of Object.entries(this._data)) {
+      object.set(key, value);
+    }
+    return object;
+  }
+
+  _computeFinalGetter(path, initial) {
+    return computeFinal(_getters.get(this), path, initial, this);
+  }
+
+  _computeFinalSetter(path, initial) {
+    return computeFinal(_setters.get(this), path, initial, this);
   }
 
   _validateOrThrow(props) {
